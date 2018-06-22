@@ -1,3 +1,4 @@
+
 # Copyright (C) 2010-2018 by Haibao Tang et al. All rights reserved.
 #
 # This code is part of the goatools distribution and goverend by its
