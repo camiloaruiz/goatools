@@ -65,16 +65,43 @@ class GoSubDagPlot(object):
 
     # http://www.graphviz.org/doc/info/colors.html
     # pylint: disable=bad-whitespace
+    ### ORIGINAL ###
+    # rel2edgekws = {
+    #     'is_a':                 {'color':'black',       'style':'solid'},
+    #     'part_of':              {'color':'magenta',     'style':'dashed'},
+    #     'regulates':            {'color':'purple3',     'style':'dashed'},
+    #     'positively_regulates': {'color':'red',         'style':'dashed'},
+    #     'negatively_regulates': {'color':'blue',        'style':'dashed'},
+    #     'occurs_in':            {'color':'aquamarine4', 'style':'dashed'},
+    #     'capable_of':           {'color':'dodgerblue',  'style':'dashed'},
+    #     'capable_of_part_of':   {'color':'darkorange',  'style':'dashed'},
+    # }
+
+    ### ALL ###
+    # rel2edgekws = {
+    #     'is_a':                 {'color':'black',       'style':'solid'},
+    #     'part_of':              {'color':'black',     'style':'dashed'},
+    #     'regulates':            {'color':'purple3',     'style':'solid'},
+    #     'positively_regulates': {'color':'purple3',         'style':'solid'},
+    #     'negatively_regulates': {'color':'purple3',        'style':'solid'},
+    #     'occurs_in':            {'color':'white', 'style':'dashed'},
+    #     'capable_of':           {'color':'white',  'style':'dashed'},
+    #     'capable_of_part_of':   {'color':'white',  'style':'dashed'},
+    # }
+
+    ### REGULATORY ONLY ###
     rel2edgekws = {
-        'is_a':                 {'color':'black',       'style':'solid'},
-        'part_of':              {'color':'magenta',     'style':'dashed'},
-        'regulates':            {'color':'purple3',     'style':'dashed'},
-        'positively_regulates': {'color':'red',         'style':'dashed'},
-        'negatively_regulates': {'color':'blue',        'style':'dashed'},
-        'occurs_in':            {'color':'aquamarine4', 'style':'dashed'},
-        'capable_of':           {'color':'dodgerblue',  'style':'dashed'},
-        'capable_of_part_of':   {'color':'darkorange',  'style':'dashed'},
+        'is_a':                 {'color':'white',       'style':'solid'},
+        'part_of':              {'color':'white',     'style':'dashed'},
+        'regulates':            {'color':'purple3',     'style':'solid'},
+        'positively_regulates': {'color':'purple3',         'style':'solid'},
+        'negatively_regulates': {'color':'purple3',        'style':'solid'},
+        'occurs_in':            {'color':'white', 'style':'dashed'},
+        'capable_of':           {'color':'white',  'style':'dashed'},
+        'capable_of_part_of':   {'color':'white',  'style':'dashed'},
     }
+
+    ###
 
     exp_keys = {
         'dag': set(['title', 'id', 'dpi']),  # pydot.Dot kwargs

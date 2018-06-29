@@ -1,11 +1,14 @@
-#!/usr/bin/env python
+#!/usr/bin/env python2
 """Create GO-Dag plots."""
 
 __copyright__ = "Copyright (C) 2016-2018, DV Klopfenstein, H Tang. All rights reserved."
 __author__ = "DV Klopfenstein"
 
-from goatools.cli.gosubdag_plot import PlotCli
+import sys
+sys.path.append("/dfs/scratch2/caruiz/code/goatools/")
 
+
+from goatools.cli.gosubdag_plot import PlotCli
 
 def run():
     """Create GO-Dag plots."""

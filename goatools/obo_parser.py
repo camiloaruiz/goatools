@@ -21,6 +21,8 @@ __copyright__ = "Copyright (C) 2010-2018, H Tang et al., All rights reserved."
 __author__ = "various"
 
 
+OBO_FILE = "/dfs/scratch2/caruiz/databases/go-basic.obo"
+
 #pylint: disable=too-few-public-methods
 class OBOReader(object):
     """Read goatools.org's obo file. Load into this iterable class.
@@ -36,7 +38,7 @@ class OBOReader(object):
     #                    'is_class_level', 'is_metadata_tag',
     #                    'is_transitive', 'transitive_over'])
 
-    def __init__(self, obo_file="go-basic.obo", optional_attrs=None):
+    def __init__(self, obo_file=OBO_FILE, optional_attrs=None):
         """Read obo file. Load dictionary."""
         self.optobj = self._init_optional_attrs(optional_attrs)  # OboOptionalAttrs or None
         self.format_version = None # e.g., "1.2" of "format-version:" line
@@ -44,6 +46,8 @@ class OBOReader(object):
         self.typedefs = {}
 
         # True if obo file exists or if a link to an obo file exists.
+        print("obo_file:")
+        print(obo_file)
         if os.path.isfile(obo_file):
             self.obo_file = obo_file
             # GOTerm attributes that are necessary for any operations:
@@ -303,7 +307,7 @@ class GOTerm(object):
 class GODag(dict):
     """Holds the GO DAG as a dict."""
 
-    def __init__(self, obo_file="go-basic.obo", optional_attrs=None, load_obsolete=False, prt=sys.stdout):
+    def __init__(self, obo_file=OBO_FILE, optional_attrs=None, load_obsolete=False, prt=sys.stdout):
         super(GODag, self).__init__()
         self.version = self.load_obo_file(obo_file, optional_attrs, load_obsolete, prt)
 

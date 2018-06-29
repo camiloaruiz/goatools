@@ -63,6 +63,8 @@ import re
 import os
 import sys
 
+sys.path.append("/dfs/scratch2/caruiz/code/goatools")
+
 from goatools.obo_parser import GODag
 from goatools.associations import get_tcntobj
 from goatools.godag.obo_optional_attributes import OboOptionalAttrs
@@ -114,6 +116,7 @@ class GetGOs(object):
                 self._add_all_leafs(ret)
             else:
                 raise RuntimeError("GO IDs NEEDED")
+
         go2obj = {go:self.go2obj[go] for go in ret['GOs']}
         ret['GOs'] = set(get_go2obj_unique(go2obj))
         return [ret['GOs'], ret['go2color']]
@@ -206,10 +209,13 @@ class PlotCli(object):
         kws_all = self.get_docargs(prt=None)
         optional_attrs = self._get_optional_attrs(kws_all)
         go2obj = GODag(kws_all['obo'], optional_attrs)
+
+
         # GO kws_all: GO go_file draw-children
         goids, go2color = GetGOs(go2obj).get_go_color(**kws_all)
         relationships = 'relationship' in optional_attrs
         kws_dag = self._get_kwsdag(goids, go2obj, **kws_all)
+
         self.gosubdag = GoSubDag(goids, go2obj, relationships, **kws_dag)
 
         if 'sections' in kws_all:
