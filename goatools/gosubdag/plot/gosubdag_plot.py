@@ -115,10 +115,15 @@ class GoSubDagPlot(object):
 
     def __init__(self, gosubdag, **kwu):
         # kwu: id, title, dpi, go2txt
+        print("kwu:")
+        print(kwu)
         self.kws = self._init_kws(**kwu)
         # kwu: log parentcnt
         assert gosubdag, "**FATAL: MISSING SUBSET GODag"
         self.gosubdag = gosubdag
+        print("kwu:")
+        print(kwu)
+
         self.edgesobj = get_edgesobj(gosubdag, **kwu)
         # pylint: disable=line-too-long
         # kwu: go2color go2bordercolor dflt_bordercolor
@@ -204,10 +209,14 @@ class GoSubDagPlot(object):
         rel2edgekws = self.rel2edgekws
         self.edgesobj.chk_edges()
         edgekws = rel2edgekws.get(rel)
+
         self._add_edges(self.edgesobj.edges, go2node, dag, **edgekws)
         for reltype, edges_list in self.edgesobj.edges_rel.items():
-            edgekws = rel2edgekws.get(reltype)
-            self._add_edges(edges_list, go2node, dag, **edgekws)
+            print("reltype:" + str(reltype))
+            if (reltype in ["regulates", "positively_regulates", "negatively_regulates"]):
+                print("Adding...")
+                edgekws = rel2edgekws.get(reltype)
+                self._add_edges(edges_list, go2node, dag, **edgekws)
         return dag
 
     @staticmethod

@@ -14,6 +14,7 @@ import os
 from goatools.godag.obo_optional_attributes import OboOptionalAttrs
 from goatools.godag.typedef import TypeDef
 from goatools.godag.typedef import add_to_typedef
+import networkx as nx
 
 GraphEngines = ("pygraphviz", "pydot")
 
@@ -22,6 +23,11 @@ __author__ = "various"
 
 
 OBO_FILE = "/dfs/scratch2/caruiz/databases/go-basic.obo"
+
+PART_OF = "part_of"
+REGULATES = "regulates"
+POSITIVELY_REGULATES = "positively_regulates"
+NEGATIVELY_REGULATES = "negatively_regulates"
 
 #pylint: disable=too-few-public-methods
 class OBOReader(object):
@@ -317,6 +323,7 @@ class GODag(dict):
 
         # Save alt_ids and their corresponding main GO ID. Add to GODag after populating GO Terms
         alt2rec = {}
+        i = 0
         for rec in reader:
             # Save record if:
             #   1) Argument load_obsolete is True OR
@@ -329,7 +336,6 @@ class GODag(dict):
         # Save the typedefs and parsed optional_attrs
         # self.optobj = reader.optobj
         self.typedefs = reader.typedefs
-
         self._populate_terms(reader.optobj)
         self._set_level_depth(reader.optobj)
 
@@ -372,8 +378,8 @@ class GODag(dict):
     def _populate_relationships(self, rec_curr):
         """Convert GO IDs in relationships to GO Term record objects. Populate children."""
         for relationship_type, goids in rec_curr.relationship.items():
-            parent_recs = set([self[goid] for goid in goids])
-            rec_curr.relationship[relationship_type] = parent_recs
+            parent_recs = set([self[goid] for goid in goids]) 
+            rec_curr.relationship[relationship_type] = parent_recs # replace GO ID with GO Term record object
             for parent_rec in parent_recs:
                 if relationship_type not in parent_rec.relationship_rev:
                     parent_rec.relationship_rev[relationship_type] = set([rec_curr])
@@ -517,6 +523,22 @@ class GODag(dict):
                                      self[label].name.replace(",", r"\n"))
         return wrapped_label
 
+    def make_graph_networkx(self, allowed_relationship_types):
+        grph = nx.DiGraph()
+        print("Making graph!")
+        for A_rec in self.values():
+            # Add node if not already in graph
+            # Must be done separately for isolated nodes
+            if not(A_rec.id in grph.nodes()):
+                grph.add_node(A_rec.id)
+
+            # Add edges
+            for relationship_type, B_recs in A_rec.relationship.items():
+                if relationship_type in allowed_relationship_types:
+                    for B_rec in B_recs:
+                        grph.add_edge(A_rec.id, B_rec.id)
+        return grph
+
     def make_graph_pydot(self, recs, nodecolor,
                          edgecolor, dpi,
                          draw_parents=True, draw_children=True):
@@ -651,5 +673,133 @@ class GODag(dict):
         if bad_goids:
             sys.stdout.write("{N} GO IDs in assc. are not found in the GO-DAG: {GOs}\n".format(
                 N=len(bad_goids), GOs=" ".join(bad_goids)))
+
+    def get_alt_id_to_master_id_dict(self):
+        # Define master IDs as outermost from obodag
+        alt_id_to_master_id_dict = dict()
+
+        for rec in self.values():
+            # Map the master id to itself
+            alt_id_to_master_id_dict[rec.id] = rec.id
+
+            # If record has alternate ids, map the alternate ids to the master id
+            if len(rec.alt_ids) > 0:
+                for alt_id in rec.alt_ids:
+                    alt_id_to_master_id_dict[alt_id] = rec.id
+
+        return alt_id_to_master_id_dict
+
+    def add_forward_reverse_relationship(self, source_rec, sink_rec, relationship_type):
+        # Forward
+        if relationship_type not in source_rec.relationship:
+            source_rec.relationship[relationship_type] = set([sink_rec])
+        else:
+            source_rec.relationship[relationship_type].add(sink_rec)
+
+        # Reverse
+        if relationship_type not in sink_rec.relationship_rev:
+            sink_rec.relationship_rev[relationship_type] = set([source_rec])
+        else:
+            sink_rec.relationship_rev[relationship_type].add(source_rec)
+
+    def propagate_relationship_is_a(self, relationship_types):
+        # If A relationship B and B is C, then A relationship C
+        # For each A
+        for A_rec in self.values():
+            # If A relationship B
+            for relationship_type, B_recs in A_rec.relationship.items():
+                if relationship_type in relationship_types:
+                    # For each B
+                    for B_rec in B_recs.copy():
+                        C_ids = B_rec.get_all_parents()
+                        for C_id in C_ids:
+                            C_rec = self[C_id]
+
+                            # A relationship C
+                            self.add_forward_reverse_relationship(A_rec, C_rec, relationship_type)
+
+    def propagate_is_a_relationship(self, relationship_types):
+        # If A is B and B relationship C, then A relationship C
+        # For each B
+        for B_rec in self.values():
+            # If B relationship C
+            for relationship_type, C_recs in B_rec.relationship.items():
+                if relationship_type in relationship_types:
+                    # A relationship C
+                    A_ids = B_rec.get_all_children()
+                    for C_rec in C_recs.copy():
+                        for A_id in A_ids:
+                            A_rec = self[A_id]
+
+                            self.add_forward_reverse_relationship(A_rec, C_rec, relationship_type)
+
+    def propagate_regulates_is_a(self):
+        # If A regulates (R/R+/R-) B and B is C, then A regulates (R/R+/R-) C
+        self.propagate_relationship_is_a([REGULATES, POSITIVELY_REGULATES, NEGATIVELY_REGULATES])
+
+    def propagate_is_a_regulates(self):
+        # If A is B and B regulates(R/R+/R-) C, then A regulates (R/R+/R-) C
+        self.propagate_is_a_relationship([REGULATES, POSITIVELY_REGULATES, NEGATIVELY_REGULATES])
+
+    def propagate_part_of_is_a(self):
+        self.propagate_relationship_is_a([PART_OF])
+
+    def propagate_is_a_part_of(self):
+        self.propagate_is_a_relationship([PART_OF])
+
+    def propagate_part_of_part_of(self):
+        # If A is part of B and B is part of C, then A is part of C
+        # For each A
+        for A_rec in self.values():
+            # If A is part of B
+            if PART_OF in A_rec.relationship.keys():
+                B_recs = A_rec.relationship[PART_OF]
+                # and B is part of C
+                for B_rec in B_recs.copy():
+                    if PART_OF in B_rec.relationship.keys():
+                        C_recs = B_rec.relationship[PART_OF]
+                        for C_rec in C_recs:
+                            # A is part of C
+                            self.add_forward_reverse_relationship(A_rec, C_rec, PART_OF)
+
+    def propagate_regulates_part_of(self):
+        # If A regulates (R/R+/R-) B and B is part of C, then A regulates (R) C
+
+        for A_rec in self.values():
+            # If A regulates B
+                for relationship_type, B_recs in A_rec.relationship.items():
+                    if relationship_type in [REGULATES, POSITIVELY_REGULATES, NEGATIVELY_REGULATES]:
+                        for B_rec in B_recs.copy():
+                            # and B is part of C
+                            if PART_OF in B_rec.relationship.keys():
+                                C_recs = B_rec.relationship[PART_OF]
+                                for C_rec in C_recs:
+                                    # A regulates C
+                                    self.add_forward_reverse_relationship(A_rec, C_rec, REGULATES)
+
+    def homogonenize_regulatory_relationships(self):
+        # Convert all R+ and R- relationships to R
+        pass
+
+    def propagate_all_regulatory_relationships(self, homogenize = False):
+        # Part of Logic
+        print("propagate_part_of_part_of...")
+        self.propagate_part_of_part_of()
+        print("propagate_part_of_is_a...")
+        self.propagate_part_of_is_a()
+        print("propagate_is_a_part_of...")
+        self.propagate_is_a_part_of()
+
+        # Regulatory Logic
+        print("propagate_is_a_regulates...")
+        self.propagate_is_a_regulates()
+        print("propagate_regulates_is_a...")
+        self.propagate_regulates_is_a()
+        print("propagate_regulates_part_of...")
+        self.propagate_regulates_part_of()
+
+        # Homogenize
+        if (homogenize):
+            self.homogonenize_regulatory_relationships()
 
 # Copyright (C) 2010-2018, H Tang et al., All rights reserved.

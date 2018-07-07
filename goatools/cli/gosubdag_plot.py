@@ -5,6 +5,7 @@ Usage:
   go_plot.py [GO ...] [--obo=<file.obo>] [--outfile=<file.png>] [--title=<title>]
              [--go_file=<file.txt>]
              [--relationship]
+             [--propagate]
              [--sections=<sections.txt>]
              [--gaf=<file.gaf>]
              [--gene2go=<gene2go>] [--taxid=<Taxonomy_number>]
@@ -193,7 +194,7 @@ class PlotCli(object):
                     'title',
                     'obo',
                     'go_aliases'])
-    kws_set = set(['relationship',
+    kws_set = set(['relationship', 'propagate',
                    'parentcnt', 'childcnt', 'mark_alt_id', 'shorten',
                    'draw-children',
                    'norel'])
@@ -207,12 +208,18 @@ class PlotCli(object):
     def cli(self):
         """Command-line interface for go_draw script."""
         kws_all = self.get_docargs(prt=None)
+        print("kws_all:")
+        print(kws_all)
+
         optional_attrs = self._get_optional_attrs(kws_all)
         go2obj = GODag(kws_all['obo'], optional_attrs)
 
+        if "propagate" in kws_all.keys():
+          go2obj.propagate_all_regulatory_relationships()
 
         # GO kws_all: GO go_file draw-children
         goids, go2color = GetGOs(go2obj).get_go_color(**kws_all)
+
         relationships = 'relationship' in optional_attrs
         kws_dag = self._get_kwsdag(goids, go2obj, **kws_all)
 
@@ -259,6 +266,9 @@ class PlotCli(object):
         print("PLOTTING KWS", kws)
         fout_img = self.get_outfile(kws['outfile'], goids, 'relationship' in kws)
         objcolor = Go2Color(self.gosubdag, objgoea=None, go2color=go2color)
+        print("kws:")
+        print(kws)
+
         objplt = GoSubDagPlot(self.gosubdag, Go2Color=objcolor, **kws)
         objplt.prt_goids(sys.stdout)
         objplt.plt_dag(fout_img)
