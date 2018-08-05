@@ -218,6 +218,23 @@ class GOTerm(object):
             all_parents |= parent.get_all_parents()
         return all_parents
 
+    def get_k_parents(self, k):
+        """Gets parent GO IDs up to k levels back"""
+        k_parents = set()
+        cur_parents = self.parents
+        cur_parents_ids = [cur_parent.id for cur_parent in cur_parents]
+
+        for i in range(0, k):
+            k_parents.update(cur_parents_ids)
+
+            new_cur_parents = set()
+            for cur_parent in cur_parents:
+                new_cur_parents.update(cur_parent.parents)
+            cur_parents = new_cur_parents
+            cur_parents_ids = [cur_parent.id for cur_parent in cur_parents]
+
+        return k_parents
+
     def get_all_upper(self):
         """Return all parent GO IDs through both 'is_a' and all relationships."""
         all_upper = set()
@@ -308,7 +325,6 @@ class GOTerm(object):
             child.write_hier_rec(gos_printed, out, len_dash, max_depth, num_child, short_prt,
                                  include_only, go_marks,
                                  depth, depth_dashes)
-
 
 class GODag(dict):
     """Holds the GO DAG as a dict."""
@@ -674,6 +690,33 @@ class GODag(dict):
             sys.stdout.write("{N} GO IDs in assc. are not found in the GO-DAG: {GOs}\n".format(
                 N=len(bad_goids), GOs=" ".join(bad_goids)))
 
+    def update_k_association(self, association, k):
+        """Add the GO parents of a gene's associated GO IDs to the gene's association."""
+        bad_goids = set()
+        # Loop through all sets of GO IDs for all genes
+        for goids in association.values():
+            parents = set()
+            # Iterate thru each GO ID in the current gene's association
+            for goid in goids:
+                try:
+                    cur_parents = self[goid]._parents
+                    for i in range(0, k):
+                        # Add cur_parents 
+                        parents.update(cur_parents)
+                        # Update cur_parents so we can operate recursively
+                        new_cur_parents = set()
+                        for cur_parent in cur_parents:
+                            new_cur_parents.update(self[cur_parent]._parents)
+                        cur_parents = new_cur_parents
+                except:
+                    bad_goids.add(goid.strip())
+            # Add the GO parents of all GO IDs in the current gene's association
+            goids.update(parents)
+        if bad_goids:
+            sys.stdout.write("{N} GO IDs in assc. are not found in the GO-DAG: {GOs}\n".format(
+                N=len(bad_goids), GOs=" ".join(bad_goids)))
+
+
     def get_alt_id_to_master_id_dict(self):
         # Define master IDs as outermost from obodag
         alt_id_to_master_id_dict = dict()
@@ -764,7 +807,6 @@ class GODag(dict):
 
     def propagate_regulates_part_of(self):
         # If A regulates (R/R+/R-) B and B is part of C, then A regulates (R) C
-
         for A_rec in self.values():
             # If A regulates B
                 for relationship_type, B_recs in A_rec.relationship.items():
