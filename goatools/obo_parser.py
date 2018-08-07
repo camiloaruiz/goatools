@@ -218,22 +218,46 @@ class GOTerm(object):
             all_parents |= parent.get_all_parents()
         return all_parents
 
-    def get_k_parents(self, k):
+    def get_k_parents(self, k = None):
         """Gets parent GO IDs up to k levels back"""
-        k_parents = set()
-        cur_parents = self.parents
-        cur_parents_ids = [cur_parent.id for cur_parent in cur_parents]
-
-        for i in range(0, k):
-            k_parents.update(cur_parents_ids)
-
-            new_cur_parents = set()
-            for cur_parent in cur_parents:
-                new_cur_parents.update(cur_parent.parents)
-            cur_parents = new_cur_parents
+        if k is None:
+            return self.get_all_parents()
+        else:
+            k_parents = set()
+            cur_parents = self.parents
             cur_parents_ids = [cur_parent.id for cur_parent in cur_parents]
 
-        return k_parents
+            for i in range(0, k):
+                k_parents.update(cur_parents_ids)
+
+                new_cur_parents = set()
+                for cur_parent in cur_parents:
+                    new_cur_parents.update(cur_parent.parents)
+                cur_parents = new_cur_parents
+                cur_parents_ids = [cur_parent.id for cur_parent in cur_parents]
+            return k_parents
+
+    def get_part_of_parents(self):
+        if not(PART_OF in self.relationship):
+            return set()
+        else:
+            return self.relationship[PART_OF]
+
+    def get_k_part_of_parents(self, k = None):
+        k_part_of_parents = set()
+        cur_part_of_parents = self.get_part_of_parents()
+        cur_part_of_parents_ids = [cur_part_of_parent.id for cur_part_of_parent in cur_part_of_parents]
+
+        for i in range(0, k):
+            k_part_of_parents.update(cur_part_of_parents_ids)
+
+            new_cur_part_of_parents = set()
+            for cur_part_of_parent in cur_part_of_parents:
+                new_cur_part_of_parents.update(cur_part_of_parent.get_part_of_parents())
+            cur_part_of_parents = new_cur_part_of_parents
+            cur_part_of_parents_ids = [cur_part_of_parent.id for cur_part_of_parent in cur_part_of_parents]
+
+        return k_part_of_parents
 
     def get_all_upper(self):
         """Return all parent GO IDs through both 'is_a' and all relationships."""
@@ -250,6 +274,24 @@ class GOTerm(object):
             all_children.add(parent.id)
             all_children |= parent.get_all_children()
         return all_children
+
+    def get_k_children(self, k = None):
+        if k is None:
+            return self.get_all_children()
+        else:
+            k_children = set()
+            cur_children = self.children
+            cur_children_ids = [cur_child.id for cur_child in cur_children]
+
+            for i in range(0, k):
+                k_children.update(cur_children_ids)
+
+                new_cur_children = set()
+                for cur_child in cur_children:
+                    new_cur_children.update(cur_child.children)
+                cur_children = new_cur_children
+                cur_children_ids = [cur_child.id for cur_child in cur_children]
+            return k_children
 
     def get_all_lower(self):
         """Return all parent GO IDs through both reverse 'is_a' and all relationships."""
@@ -692,29 +734,32 @@ class GODag(dict):
 
     def update_k_association(self, association, k):
         """Add the GO parents of a gene's associated GO IDs to the gene's association."""
-        bad_goids = set()
-        # Loop through all sets of GO IDs for all genes
-        for goids in association.values():
-            parents = set()
-            # Iterate thru each GO ID in the current gene's association
-            for goid in goids:
-                try:
-                    cur_parents = self[goid]._parents
-                    for i in range(0, k):
-                        # Add cur_parents 
-                        parents.update(cur_parents)
-                        # Update cur_parents so we can operate recursively
-                        new_cur_parents = set()
-                        for cur_parent in cur_parents:
-                            new_cur_parents.update(self[cur_parent]._parents)
-                        cur_parents = new_cur_parents
-                except:
-                    bad_goids.add(goid.strip())
-            # Add the GO parents of all GO IDs in the current gene's association
-            goids.update(parents)
-        if bad_goids:
-            sys.stdout.write("{N} GO IDs in assc. are not found in the GO-DAG: {GOs}\n".format(
-                N=len(bad_goids), GOs=" ".join(bad_goids)))
+        if k is None:
+            self.update_association(association)
+        else:
+            bad_goids = set()
+            # Loop through all sets of GO IDs for all genes
+            for goids in association.values():
+                parents = set()
+                # Iterate thru each GO ID in the current gene's association
+                for goid in goids:
+                    try:
+                        cur_parents = self[goid]._parents
+                        for i in range(0, k):
+                            # Add cur_parents 
+                            parents.update(cur_parents)
+                            # Update cur_parents so we can operate recursively
+                            new_cur_parents = set()
+                            for cur_parent in cur_parents:
+                                new_cur_parents.update(self[cur_parent]._parents)
+                            cur_parents = new_cur_parents
+                    except:
+                        bad_goids.add(goid.strip())
+                # Add the GO parents of all GO IDs in the current gene's association
+                goids.update(parents)
+            if bad_goids:
+                sys.stdout.write("{N} GO IDs in assc. are not found in the GO-DAG: {GOs}\n".format(
+                    N=len(bad_goids), GOs=" ".join(bad_goids)))
 
 
     def get_alt_id_to_master_id_dict(self):
@@ -745,54 +790,62 @@ class GODag(dict):
         else:
             sink_rec.relationship_rev[relationship_type].add(source_rec)
 
-    def propagate_relationship_is_a(self, relationship_types):
+    def propagate_relationship_is_a(self, relationship_types, k_parents = None):
         # If A relationship B and B is C, then A relationship C
         # For each A
+        inferred_relationships = []
         for A_rec in self.values():
             # If A relationship B
             for relationship_type, B_recs in A_rec.relationship.items():
                 if relationship_type in relationship_types:
                     # For each B
                     for B_rec in B_recs.copy():
-                        C_ids = B_rec.get_all_parents()
+                        C_ids = B_rec.get_k_parents(k_parents)
                         for C_id in C_ids:
                             C_rec = self[C_id]
 
                             # A relationship C
-                            self.add_forward_reverse_relationship(A_rec, C_rec, relationship_type)
+                            inferred_relationships.append((A_rec, C_rec, relationship_type))
+        return inferred_relationships
 
-    def propagate_is_a_relationship(self, relationship_types):
+    def propagate_is_a_relationship(self, relationship_types, k_children = None):
         # If A is B and B relationship C, then A relationship C
         # For each B
+        inferred_relationships = []
         for B_rec in self.values():
             # If B relationship C
             for relationship_type, C_recs in B_rec.relationship.items():
                 if relationship_type in relationship_types:
                     # A relationship C
-                    A_ids = B_rec.get_all_children()
+                    A_ids = B_rec.get_k_children(k_children)
                     for C_rec in C_recs.copy():
                         for A_id in A_ids:
                             A_rec = self[A_id]
+                            inferred_relationships.append((A_rec, C_rec, relationship_type))
 
-                            self.add_forward_reverse_relationship(A_rec, C_rec, relationship_type)
+        return inferred_relationships
 
-    def propagate_regulates_is_a(self):
+    def propagate_regulates_is_a(self, k_parents = None):
         # If A regulates (R/R+/R-) B and B is C, then A regulates (R/R+/R-) C
-        self.propagate_relationship_is_a([REGULATES, POSITIVELY_REGULATES, NEGATIVELY_REGULATES])
+        return self.propagate_relationship_is_a([REGULATES, POSITIVELY_REGULATES, NEGATIVELY_REGULATES], k_parents)
 
-    def propagate_is_a_regulates(self):
+    def propagate_is_a_regulates(self, k_children = None):
         # If A is B and B regulates(R/R+/R-) C, then A regulates (R/R+/R-) C
-        self.propagate_is_a_relationship([REGULATES, POSITIVELY_REGULATES, NEGATIVELY_REGULATES])
+        return self.propagate_is_a_relationship([REGULATES, POSITIVELY_REGULATES, NEGATIVELY_REGULATES], k_children)
 
-    def propagate_part_of_is_a(self):
-        self.propagate_relationship_is_a([PART_OF])
+    def propagate_part_of_is_a(self, k_parents = None):
+        return self.propagate_relationship_is_a([PART_OF], k_parents)
 
-    def propagate_is_a_part_of(self):
-        self.propagate_is_a_relationship([PART_OF])
+    def propagate_is_a_part_of(self, k_children = None):
+        return self.propagate_is_a_relationship([PART_OF], k_children)
 
     def propagate_part_of_part_of(self):
+        # In practice, we don't use this method
+        # Instead, we write a "get_k_part_of_parents()" method that is subsequently used in propagate_regulates_part_of
+
         # If A is part of B and B is part of C, then A is part of C
         # For each A
+        # These are all direct propagation
         for A_rec in self.values():
             # If A is part of B
             if PART_OF in A_rec.relationship.keys():
@@ -803,42 +856,55 @@ class GODag(dict):
                         C_recs = B_rec.relationship[PART_OF]
                         for C_rec in C_recs:
                             # A is part of C
-                            self.add_forward_reverse_relationship(A_rec, C_rec, PART_OF)
+                            inferred_relationships.append((A_rec, C_rec, PART_OF))
 
-    def propagate_regulates_part_of(self):
+        return inferred_relationships
+
+    def propagate_regulates_part_of(self, k_parents = None):
         # If A regulates (R/R+/R-) B and B is part of C, then A regulates (R) C
+        # "Levels to propagate" will already have been taken care of here by previous "part of" relationship propagations
+        inferred_relationships = []
+
         for A_rec in self.values():
             # If A regulates B
-                for relationship_type, B_recs in A_rec.relationship.items():
-                    if relationship_type in [REGULATES, POSITIVELY_REGULATES, NEGATIVELY_REGULATES]:
-                        for B_rec in B_recs.copy():
-                            # and B is part of C
-                            if PART_OF in B_rec.relationship.keys():
-                                C_recs = B_rec.relationship[PART_OF]
-                                for C_rec in C_recs:
-                                    # A regulates C
-                                    self.add_forward_reverse_relationship(A_rec, C_rec, REGULATES)
+            for relationship_type, B_recs in A_rec.relationship.items():
+                if relationship_type in [REGULATES, POSITIVELY_REGULATES, NEGATIVELY_REGULATES]:
+                    for B_rec in B_recs.copy():
+                        # and B is part of C
+                        if PART_OF in B_rec.relationship.keys():
+                            C_ids = B_rec.get_k_part_of_parents(k_parents)
+                            for C_id in C_ids:
+                                C_rec = self[C_id]
 
-    def homogonenize_regulatory_relationships(self):
-        # Convert all R+ and R- relationships to R
-        pass
+                                inferred_relationships.append((A_rec, C_rec, REGULATES))
 
-    def propagate_all_regulatory_relationships(self, homogenize = False):
-        # Part of Logic
-        print("propagate_part_of_part_of...")
-        self.propagate_part_of_part_of()
-        print("propagate_part_of_is_a...")
-        self.propagate_part_of_is_a()
-        print("propagate_is_a_part_of...")
-        self.propagate_is_a_part_of()
+        return inferred_relationships
 
+    def add_inferred_relationships(self, inferred_relationships):
+        # inferred_relationships takes the form
+        # [(source_rec, sink_rec, relationship_type)]
+        for source_rec, sink_rec, relationship_type in inferred_relationships:
+            self. add_forward_reverse_relationship(source_rec, sink_rec, relationship_type)
+
+    def propagate_all_regulatory_relationships(self, k_parents = None, k_children = None, homogenize = False):
+        inferred_relationships = []
+        
         # Regulatory Logic
         print("propagate_is_a_regulates...")
-        self.propagate_is_a_regulates()
+        inferred_relationships += self.propagate_is_a_regulates(k_children)
         print("propagate_regulates_is_a...")
-        self.propagate_regulates_is_a()
+        inferred_relationships += self.propagate_regulates_is_a(k_parents)
+
+        # Part of Logic
+        print("propagate_part_of_is_a...")
+        inferred_relationships += self.propagate_part_of_is_a(k_parents)
+        print("propagate_is_a_part_of...")
+        inferred_relationships += self.propagate_is_a_part_of(k_children)
         print("propagate_regulates_part_of...")
-        self.propagate_regulates_part_of()
+        inferred_relationships += self.propagate_regulates_part_of(k_parents)
+
+        # Update obodag now
+        self.add_inferred_relationships(inferred_relationships)
 
         # Homogenize
         if (homogenize):
